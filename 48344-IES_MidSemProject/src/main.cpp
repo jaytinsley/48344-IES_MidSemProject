@@ -29,8 +29,6 @@ float brightness_Definer(int ADC_Low_Light, int ADC_High_Light);
 
 void Myteleplot(float brightness, int ADC_Low_Light, int ADC_High_Light);
 
-void get_Debug_state();
-
 void project_Debugging(int DebugState, float Sonar_Range, float Brightness);
 void printMenu();
 
@@ -55,7 +53,7 @@ int led_Mode = 0;
 int sys_Mode = 0;
 // 0 = Auto, 1 = Manual, 2 = Emergency
 
-int debug_State = -1;
+int debug_State = 0;
 // 0 = Nothing, 1 = Distance, 2 = Brightness, 3 = Both
 
 int adc = 0;
@@ -135,9 +133,17 @@ int main(void)
             ADC_High_Light = adc;
         }
 
-        if (debug_State == -1)
+        if (flag_read_done)
         {
-            get_Debug_state();
+            flag_interrupted = 0;
+            debug_State = atoi(usart_buf);
+            flag_read_done = 0;
+
+            usart_send_string("Your Debug Choice: ");
+            usart_send_string(usart_buf);
+            usart_send_string("\r\n");
+            printMenu();
+            usart_flush();
         }
         
         // usart_send_string("test");
@@ -340,20 +346,6 @@ void printMenu(){
     usart_send_string("Enter Debug Choice: \r\n");
 }
 
-void get_Debug_state(){
-
-    usart_flush();
-    flag_read_done = 0;
-
-    while (!flag_read_done);
-    debug_State = atoi(usart_buf);
-
-    usart_send_string("Your Debug Choice: ");
-    usart_send_string(usart_buf);
-    usart_send_string("\r\n");
-    
-    // printMenu();
-}
 
 void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
     switch (DebugState)
