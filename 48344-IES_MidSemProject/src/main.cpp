@@ -41,6 +41,8 @@ int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
 int sys_Mode = 0;
 // 0 = Auto, 1 = Manual, 2 = Emergency
+int adc = 0;
+
 
 ISR(USART_RX_vect)
 {
@@ -74,6 +76,11 @@ ISR(PCINT0_vect)
     }
 }
 
+ISR(ADC_vect){
+  adc = ADC;
+}
+
+
 int main(void)
 {
 
@@ -97,42 +104,65 @@ int main(void)
 
     usart_init_v2(19200);
     _delay_ms(100);
-    usart_flush();
+    usart_flush();  
+
+
+
+    bitSet(ADMUX, REFS0); // set reference voltage to internal
+                          //SI: 24567707 7%6 = 1; 
+    bitSet(ADMUX, MUX1);  // set ADC1 as input
+    ADCSRA |= 0b111 < 0;
+    bitSet(ADCSRA, ADIE);
+    bitSet(ADCSRA, ADEN);
+
+
 
     sei();
 
+    bitSet(ADCSRA, ADSC);
+
+    int ADC_Low_Light = adc;
+    int ADC_High_Light = adc;
+    
+    
+
     while (1)
     {
+        // Constantly adjust scale for brightness 
+        bitSet(ADCSRA, ADSC);
+        if (adc < ADC_Low_Light)
+        {
+            ADC_Low_Light = adc; // Constantly adjust scale for brightness
+        }
+        
+        if (adc > ADC_High_Light)
+        {
+            ADC_High_Light = adc;
+        }
+
         _delay_ms(100);
         switch (sys_Mode)
         {
         case 0:
             // Auto Mode
-            for (int i = 0; i < 3; i++)
-            {
-                led_Mode = i;
-                Led_Dictator(50, 1000);
-                debugPrint();
-            }
-
+            led_Mode = (led_Mode+1)%3;
             break;
 
         case 1:
             // Manual Mode
-            Led_Dictator(50, 1000);
-            debugPrint();
-
             break;
 
         case 2:
             led_Mode = 0;
-            Led_Dictator(50,1000);
-            debugPrint();
+
             break;
 
         default:
             break;
         }
+
+        Led_Dictator(50,1000);
+        debugPrint();
 
     }
 }
@@ -142,7 +172,7 @@ void LedControl(int brightness, int T, bool status, int LED_Pin)
     /*
     Brightness 0 - 256
     T time in ms
-    status: on or off
+    status: 1 / 0 -> on or off
     LED_Pin
     */
 
@@ -215,40 +245,51 @@ void debugPrint()
 {
     usart_send_string("----------------------\r\n");
 
-    usart_send_string("SYS_MODE: ");
-    usart_send_num(sys_Mode, 0, 0);
-    usart_send_string("\r\n");
+    // usart_send_num(sys_Mode, 0, 0);
+    switch (sys_Mode)
+    {
+    case 0:
+            usart_send_string("SYS_MODE: Auto");
+        break;
+    
+    case 1:
+            usart_send_string("SYS_MODE: Manual");
+        break;
+
+    case 2:
+            usart_send_string("SYS_MODE: Emergency");
+        break;
+
+    default:
+        break;
+    }
 
     usart_send_string("\r\n");
 
-    usart_send_string("LED_MODE: ");
-    usart_send_num(led_Mode, 0, 0);
+    usart_send_string("\r\n");
+
+    switch (led_Mode)
+    {
+    case 0:
+            usart_send_string("Led: Green");
+        break;
+    
+    case 1:
+            usart_send_string("Led: Yellow");
+        break;
+
+    case 2:
+            usart_send_string("Led: Red");
+        break;
+
+    default:
+        break;
+    }
+
+
     usart_send_string("\r\n");
 }
 
-//
-// void GetNumbers(void){
-
-//   usart_flush();
-//   flag_read_done = 0;
-
-//   usart_send_string("Enter Number 1\r\n");
-//   while (!flag_read_done);
-//   NUM_A = atoi(usart_buf);
-
-//   flag_read_done = 0;
-//   usart_send_string("Enter Number 2\r\n");
-//   while (!flag_read_done);
-//   NUM_B = atoi(usart_buf);
-
-//   usart_send_string("Number 1: ");
-//   usart_send_num(NUM_A, 5, 0);
-//   usart_send_string("\r\n");
-
-//   usart_send_string("Number 2: ");
-//   usart_send_num(NUM_B, 5, 0);
-//   usart_send_string("\r\n");
-// }
 
 void usart_init(float baud)
 {
@@ -336,3 +377,27 @@ void usart_read_string(char *ptr)
         }
     }
 }
+
+//
+// void GetNumbers(void){
+
+//   usart_flush();
+//   flag_read_done = 0;
+
+//   usart_send_string("Enter Number 1\r\n");
+//   while (!flag_read_done);
+//   NUM_A = atoi(usart_buf);
+
+//   flag_read_done = 0;
+//   usart_send_string("Enter Number 2\r\n");
+//   while (!flag_read_done);
+//   NUM_B = atoi(usart_buf);
+
+//   usart_send_string("Number 1: ");
+//   usart_send_num(NUM_A, 5, 0);
+//   usart_send_string("\r\n");
+
+//   usart_send_string("Number 2: ");
+//   usart_send_num(NUM_B, 5, 0);
+//   usart_send_string("\r\n");
+// }
