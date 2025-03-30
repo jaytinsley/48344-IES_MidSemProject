@@ -23,9 +23,17 @@ void LedControl(int brightness, int T, bool status, int LED_Pin);
 void Led_Dictator(int brightness, int Time);
 void debugPrint();
 
+void Setup(); 
+
 float brightness_Definer(int ADC_Low_Light, int ADC_High_Light);
 
-void teleplot(float brightness, int ADC_Low_Light, int ADC_High_Light);
+void Myteleplot(float brightness, int ADC_Low_Light, int ADC_High_Light);
+
+void get_Debug_state();
+
+void project_Debugging(int DebugState, float Sonar_Range, float Brightness);
+void printMenu();
+
 
 #define BUF_SIZE 50
 char usart_buf[BUF_SIZE] = {0};
@@ -43,8 +51,13 @@ volatile bool flag_interrupted = 0;
 
 int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
+
 int sys_Mode = 0;
 // 0 = Auto, 1 = Manual, 2 = Emergency
+
+int debug_State = -1;
+// 0 = Nothing, 1 = Distance, 2 = Brightness, 3 = Both
+
 int adc = 0;
 
 
@@ -87,39 +100,11 @@ ISR(ADC_vect){
 
 int main(void)
 {
-
-    bitSet(DDRB, Pin_Red_Led);
-    bitSet(DDRB, Pin_Green_Led);
-    bitSet(DDRB, Pin_Yellow_Led);
-
-        
-    bitClear(DDRD,pin_button_change_led_mode);
-    bitSet(PORTD,pin_button_change_led_mode);
-        
-    bitClear(DDRB,pin_button_change_sys_mode);
-    bitSet(PORTB,pin_button_change_sys_mode);
-
-
-    EIMSK |= 1 << INT0;
-    EICRA |= 3 << 0;
-
-    bitSet(PCICR,PCIE0);
-    bitSet(PCMSK0,PCINT1);
-
-    usart_init_v2(115200);
+    Setup();
+    
+    usart_init_v2(19200);
     _delay_ms(100);
     usart_flush();  
-
-
-
-    bitSet(ADMUX, REFS0); // set reference voltage to internal
-                          //SI: 24567707 7%6 = 1; 
-    bitSet(ADMUX, MUX1);  // set ADC1 as input
-    ADCSRA |= 0b111 < 0;
-    bitSet(ADCSRA, ADIE);
-    bitSet(ADCSRA, ADEN);
-
-
 
     sei();
 
@@ -129,9 +114,15 @@ int main(void)
     int ADC_High_Light = adc;
     
     
-
+    int counter=0;
+    float Distance = 0;
+    printMenu();
+    usart_flush();
     while (1)
     {
+        counter = (counter+1)%180;
+        Distance = sin(counter);
+
         // Constantly adjust scale for brightness 
         bitSet(ADCSRA, ADSC);
         if (adc < ADC_Low_Light && adc != 0)
@@ -144,7 +135,16 @@ int main(void)
             ADC_High_Light = adc;
         }
 
-        _delay_ms(100);
+        if (debug_State == -1)
+        {
+            get_Debug_state();
+        }
+        
+        // usart_send_string("test");
+        project_Debugging(debug_State, Distance, brightness_Definer(ADC_Low_Light,ADC_High_Light));    
+        
+
+        // _delay_ms(100);
         switch (sys_Mode)
         {
         case 0:
@@ -165,11 +165,13 @@ int main(void)
             break;
         }
 
-        Led_Dictator(50*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
+        Led_Dictator(255*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
+
+
         // debugPrint();
-        teleplot(brightness_Definer(ADC_Low_Light, ADC_High_Light), ADC_Low_Light, ADC_High_Light);
-
-
+        // Myteleplot(brightness_Definer(ADC_Low_Light, ADC_High_Light), ADC_Low_Light, ADC_High_Light);
+        
+        usart_flush();
     }
 }
 
@@ -307,22 +309,115 @@ float brightness_Definer(int ADC_Low_Light, int ADC_High_Light){
     return brightness;
 }
 
-void teleplot(float brightness, int ADC_Low_Light, int ADC_High_Light){
+void Myteleplot(float brightness, int ADC_Low_Light, int ADC_High_Light){
         usart_send_string(">brightness:");
         usart_send_num(brightness, 4, 4);
         usart_send_string("\n");
 
-        usart_send_string(">ADC_Low_Light:");
-        usart_send_num(ADC_Low_Light, 4, 4);
+        // usart_send_string(">ADC_Low_Light:");
+        // usart_send_num(ADC_Low_Light, 4, 4);
+        // usart_send_string("\n");
+
+        // usart_send_string(">ADC_High_Light:");
+        // usart_send_num(ADC_High_Light, 4, 4);
+        // usart_send_string("\n");
+
+        // usart_send_string(">adc:");
+        // usart_send_num(adc, 4, 4);
+        // usart_send_string("\n");
+}
+
+void printMenu(){
+    usart_send_string("Debug Menu: \r\n");
+    
+    usart_send_string("0: No Debug Graphs. \r\n");
+
+    usart_send_string("1: Distance Graph. \r\n");
+
+    usart_send_string("2: Brightness Graph. \r\n");
+
+    usart_send_string("3: Brighness and Distance Graph. \r\n");
+    usart_send_string("Enter Debug Choice: \r\n");
+}
+
+void get_Debug_state(){
+
+    usart_flush();
+    flag_read_done = 0;
+
+    while (!flag_read_done);
+    debug_State = atoi(usart_buf);
+
+    usart_send_string("Your Debug Choice: ");
+    usart_send_string(usart_buf);
+    usart_send_string("\r\n");
+    
+    // printMenu();
+}
+
+void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
+    switch (DebugState)
+    {
+    case 0:
+        /* Nothing */
+        break;
+    case 1:
+        /* Distance Measurements */
+        usart_send_string(">Distance:");
+        usart_send_num(Sonar_Range, 4, 4);
+        usart_send_string("\n");
+        break;
+    case 2:
+        /* Ambient Brightness || LED Brightness */
+        usart_send_string(">brightness:");
+        usart_send_num(Brightness, 4, 4);
+        usart_send_string("\n");
+        break;
+    case 3:
+        /* Both */
+
+        /* Ambient Brightness || LED Brightness */
+        usart_send_string(">Brightness:");
+        usart_send_num(Brightness, 4, 4);
         usart_send_string("\n");
 
-        usart_send_string(">ADC_High_Light:");
-        usart_send_num(ADC_High_Light, 4, 4);
+        usart_send_string(">Distance:");
+        usart_send_num(Sonar_Range, 4, 4);
         usart_send_string("\n");
 
-        usart_send_string(">adc:");
-        usart_send_num(adc, 4, 4);
-        usart_send_string("\n");
+        break;
+
+    default:
+        break;
+    }
+}
+
+void Setup(){
+
+    bitSet(DDRB, Pin_Red_Led);
+    bitSet(DDRB, Pin_Green_Led);
+    bitSet(DDRB, Pin_Yellow_Led);
+
+        
+    bitClear(DDRD,pin_button_change_led_mode);
+    bitSet(PORTD,pin_button_change_led_mode);
+        
+    bitClear(DDRB,pin_button_change_sys_mode);
+    bitSet(PORTB,pin_button_change_sys_mode);
+
+
+    EIMSK |= 1 << INT0;
+    EICRA |= 3 << 0;
+
+    bitSet(PCICR,PCIE0);
+    bitSet(PCMSK0,PCINT1);
+
+    bitSet(ADMUX, REFS0); 
+    bitSet(ADMUX, MUX1); 
+    ADCSRA |= 0b111 < 0;
+    bitSet(ADCSRA, ADIE);
+    bitSet(ADCSRA, ADEN);
+
 }
 
 
@@ -397,9 +492,8 @@ void usart_read_string(char *ptr)
         while (!bitRead(UCSR0A, RXC0))
             ;
         tmp = UDR0;
-        // if (tmp == '\r' || tmp == '\n') {
-        if (tmp == '\n')
-        {
+        if (tmp == '\r' || tmp == '\n') {
+        // if (tmp == '\n'){
 
             *ptr = '\0';
             ptr = usart_buf;
@@ -413,27 +507,3 @@ void usart_read_string(char *ptr)
         }
     }
 }
-
-//
-// void GetNumbers(void){
-
-//   usart_flush();
-//   flag_read_done = 0;
-
-//   usart_send_string("Enter Number 1\r\n");
-//   while (!flag_read_done);
-//   NUM_A = atoi(usart_buf);
-
-//   flag_read_done = 0;
-//   usart_send_string("Enter Number 2\r\n");
-//   while (!flag_read_done);
-//   NUM_B = atoi(usart_buf);
-
-//   usart_send_string("Number 1: ");
-//   usart_send_num(NUM_A, 5, 0);
-//   usart_send_string("\r\n");
-
-//   usart_send_string("Number 2: ");
-//   usart_send_num(NUM_B, 5, 0);
-//   usart_send_string("\r\n");
-// }
