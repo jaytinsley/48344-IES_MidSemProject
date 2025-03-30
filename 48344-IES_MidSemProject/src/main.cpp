@@ -23,6 +23,10 @@ void LedControl(int brightness, int T, bool status, int LED_Pin);
 void Led_Dictator(int brightness, int Time);
 void debugPrint();
 
+float brightness_Definer(int ADC_Low_Light, int ADC_High_Light);
+
+void teleplot(float brightness, int ADC_Low_Light, int ADC_High_Light);
+
 #define BUF_SIZE 50
 char usart_buf[BUF_SIZE] = {0};
 char *pbuf_usart = usart_buf;
@@ -102,7 +106,7 @@ int main(void)
     bitSet(PCICR,PCIE0);
     bitSet(PCMSK0,PCINT1);
 
-    usart_init_v2(19200);
+    usart_init_v2(115200);
     _delay_ms(100);
     usart_flush();  
 
@@ -121,7 +125,7 @@ int main(void)
 
     bitSet(ADCSRA, ADSC);
 
-    int ADC_Low_Light = adc;
+    int ADC_Low_Light = 100;
     int ADC_High_Light = adc;
     
     
@@ -130,7 +134,7 @@ int main(void)
     {
         // Constantly adjust scale for brightness 
         bitSet(ADCSRA, ADSC);
-        if (adc < ADC_Low_Light)
+        if (adc < ADC_Low_Light && adc != 0)
         {
             ADC_Low_Light = adc; // Constantly adjust scale for brightness
         }
@@ -161,8 +165,10 @@ int main(void)
             break;
         }
 
-        Led_Dictator(50,1000);
-        debugPrint();
+        Led_Dictator(50*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
+        // debugPrint();
+        teleplot(brightness_Definer(ADC_Low_Light, ADC_High_Light), ADC_Low_Light, ADC_High_Light);
+
 
     }
 }
@@ -213,7 +219,7 @@ void Led_Dictator(int brightness, int Time)
         LedControl(brightness, 0, 0, Pin_Red_Led);
 
         // Turn on GREEN LED
-        LedControl(brightness, 1, Time, Pin_Green_Led);
+        LedControl(brightness*0.25, 1, Time, Pin_Green_Led);
         break;
 
     case 1:
@@ -289,6 +295,36 @@ void debugPrint()
 
     usart_send_string("\r\n");
 }
+
+float brightness_Definer(int ADC_Low_Light, int ADC_High_Light){
+    float brightness = adc;
+    brightness = (brightness - ADC_Low_Light)/(ADC_High_Light - ADC_Low_Light);
+    if (brightness<0.1)
+    {
+        return 0.1;
+    }
+    
+    return brightness;
+}
+
+void teleplot(float brightness, int ADC_Low_Light, int ADC_High_Light){
+        usart_send_string(">brightness:");
+        usart_send_num(brightness, 4, 4);
+        usart_send_string("\n");
+
+        usart_send_string(">ADC_Low_Light:");
+        usart_send_num(ADC_Low_Light, 4, 4);
+        usart_send_string("\n");
+
+        usart_send_string(">ADC_High_Light:");
+        usart_send_num(ADC_High_Light, 4, 4);
+        usart_send_string("\n");
+
+        usart_send_string(">adc:");
+        usart_send_num(adc, 4, 4);
+        usart_send_string("\n");
+}
+
 
 
 void usart_init(float baud)
