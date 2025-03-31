@@ -108,7 +108,7 @@ int main(void)
 
     bitSet(ADCSRA, ADSC);
 
-    int ADC_Low_Light = 100;
+    int ADC_Low_Light = 0;
     int ADC_High_Light = adc;
     
     
@@ -119,10 +119,16 @@ int main(void)
     while (1)
     {
         counter = (counter+1)%180;
-        Distance = sin(counter);
+        Distance = sin(counter*3.14/30);
 
         // Constantly adjust scale for brightness 
         bitSet(ADCSRA, ADSC);
+        if (ADC_Low_Light == 0 && ADC_High_Light != 0)
+        {
+            ADC_Low_Light = ADC_High_Light;
+        }
+        
+
         if (adc < ADC_Low_Light && adc != 0)
         {
             ADC_Low_Light = adc; // Constantly adjust scale for brightness
@@ -135,6 +141,8 @@ int main(void)
 
         if (flag_read_done)
         {
+
+            usart_flush();
             flag_interrupted = 0;
             debug_State = atoi(usart_buf);
             flag_read_done = 0;
@@ -142,8 +150,10 @@ int main(void)
             usart_send_string("Your Debug Choice: ");
             usart_send_string(usart_buf);
             usart_send_string("\r\n");
+            
             printMenu();
             usart_flush();
+
         }
         
         // usart_send_string("test");
@@ -361,7 +371,7 @@ void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
         break;
     case 2:
         /* Ambient Brightness || LED Brightness */
-        usart_send_string(">brightness:");
+        usart_send_string(">Brightness:");
         usart_send_num(Brightness, 4, 4);
         usart_send_string("\n");
         break;
@@ -412,7 +422,7 @@ void Setup(){
 
 }
 
-
+//------------------------------------------------------------------------------
 
 void usart_init(float baud)
 {
