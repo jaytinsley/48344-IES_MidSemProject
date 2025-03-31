@@ -47,6 +47,13 @@ volatile bool flag_interrupted = 0;
 
 #define pin_button_change_sys_mode PB1
 
+//NEW DEFINES BUZZER PIN PD3
+#define Pin_Buzzer PD3
+
+// NEW ultrasonic pins PD4 TRIG AND PD5 ECHO 
+#define Pin_Sonar_Trig PD4 
+#define Pin_Sonar_Echo PD5 
+
 int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
 
@@ -57,6 +64,9 @@ int debug_State = 0;
 // 0 = Nothing, 1 = Distance, 2 = Brightness, 3 = Both
 
 int adc = 0;
+
+//NEW for extended red logic 
+bool isRedExtended = false; 
 
 
 ISR(USART_RX_vect)
@@ -118,8 +128,17 @@ int main(void)
     usart_flush();
     while (1)
     {
+        //MODIFIED TO MEASURE REAL DISTANCE FROM ULTRASONIC 
+
+        Distance = get_distance_cm(); 
+        // If sensor times out => returns -1 => use sin() as a fallback for test
+        if (Distance < 0) 
+        {
         counter = (counter+1)%180;
-        Distance = sin(counter*3.14/30);
+        Distance = 50.0f + 50.0f * sin(counter * M_PI / 180.0f);
+            //range 0..100 
+                   // Distance = sin(counter);
+        } 
 
         // Constantly adjust scale for brightness 
         bitSet(ADCSRA, ADSC);
@@ -158,21 +177,77 @@ int main(void)
         
         // usart_send_string("test");
         project_Debugging(debug_State, Distance, brightness_Definer(ADC_Low_Light,ADC_High_Light));    
-        
+
+        // ============================= //
+        //  Main Logic for Each Sys Mode //
+        // ============================= //
 
         // _delay_ms(100);
         switch (sys_Mode)
         {
         case 0:
+             /* 
+               If an object (pedestrian) is detected close enough (< 20cm for example):
+                 - If not red, switch to red + beep
+                 - If already red, keep it red (extend) while distance < 20
+               Otherwise, cycle LED once each loop
+            */
             // Auto Mode
+
+            if (Distance < 20.0f) // threshold as needed 
+            {
+                //theres a pedestrian 
+                if (led_Mode !=2) {
+                    //if not red, force red now 
+                    led_Mode = 2;
+                }
+                //mark that were in extended red 
+                isRedExtended = true; 
+                //Buzzer 
+                beepAlarm(Distance); 
+            }
+            else
+            {
+                //no object in crossing 
+                if (isRedExtended)
+                {
+                    //if we are in extended red, check if safe to stop extension 
+                    isRedExtended = false; 
+                }
+                else
+                {
+                    //nomral auto cycle 
+    
             led_Mode = (led_Mode+1)%3;
+                }
+            }
+            
             break;
 
         case 1:
             // Manual Mode
+             /* 
+              - If object detected, force red + beep 
+              - Otherwise LED changes only when user presses INT0
+            */
+            if (Distance < 20.0f)
+            {
+                led_Mode = 2; 
+                isRedExtended = true; 
+                beepAlarm(Distance);
+            }
+            else
+            {
+                isRedExtended = false; 
+            }
+            //no auto cycling here --> user button changes led-Mode
             break;
 
-        case 2:
+        case 2: //emergency mode 
+            /* 
+               - Force green 
+               - Optionally ignore pedestrians or do something else
+            */ 
             led_Mode = 0;
 
             break;
@@ -181,7 +256,7 @@ int main(void)
             break;
         }
 
-        Led_Dictator(255*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
+        Led_Dictator((int)(255*brightness_Definer(ADC_Low_Light,ADC_High_Light)),1000);
 
 
         // debugPrint();
@@ -395,19 +470,25 @@ void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
 }
 
 void Setup(){
-
+//SETUP CODE 
+    //LEDS OUTPUTS 
     bitSet(DDRB, Pin_Red_Led);
     bitSet(DDRB, Pin_Green_Led);
     bitSet(DDRB, Pin_Yellow_Led);
 
-        
+    // Buttons as inputs + pull-up
+   
     bitClear(DDRD,pin_button_change_led_mode);
-    bitSet(PORTD,pin_button_change_led_mode);
-        
+    bitSet(PORTD,pin_button_change_led_mode);    
     bitClear(DDRB,pin_button_change_sys_mode);
     bitSet(PORTB,pin_button_change_sys_mode);
+    
+    // [NEW] Buzzer as output, ensure OFF
 
+    bitSet(DDRD, Pin_Buzzer);
+    bitClear(PORTD, Pin_Buzzer);
 
+    
     EIMSK |= 1 << INT0;
     EICRA |= 3 << 0;
 
