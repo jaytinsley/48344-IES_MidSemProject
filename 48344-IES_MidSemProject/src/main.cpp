@@ -487,6 +487,10 @@ void Setup(){
 
     bitSet(DDRD, Pin_Buzzer);
     bitClear(PORTD, Pin_Buzzer);
+     // [NEW] Ultrasonic sensor pins
+    bitSet(DDRD, Pin_Sonar_Trig); //trig as output 
+    bitClear(DDRD. Pin_Sonar_Echo); //Echo as input 
+    bitClear(PORTD, Pin_Sonar_Echo);
 
     
     EIMSK |= 1 << INT0;
@@ -494,7 +498,7 @@ void Setup(){
 
     bitSet(PCICR,PCIE0);
     bitSet(PCMSK0,PCINT1);
-
+//ADC STUFF
     bitSet(ADMUX, REFS0); 
     bitSet(ADMUX, MUX1); 
     ADCSRA |= 0b111 < 0;
@@ -590,3 +594,73 @@ void usart_read_string(char *ptr)
         }
     }
 }
+
+// ============================ //
+//       NEW ULTRASONIC + BEEP  //
+// ============================ //
+/**
+ *  Measure distance using a typical ultrasonic.
+ * @return distance in cm, or -1 if timed out.
+ */
+float get_distance_cm()
+{
+    //1 SEND 10US pulse on TRIG 
+    bitClear(PORTD, Pin_Sonar_Trig); 
+_delay_us(2); 
+bitSet(PORTD, Pin_Sonar_Trig); 
+_delay_us(10);
+bitClear(PORTD, Pin_Sonar_Trig);
+//WAIT FOR ECHO TO GO HIGH 
+uint32_t count = 0; 
+while (!bitRead(PIND, Pin_Sonar_Echo))
+{
+count++;
+if (count> 30000) // -30ms
+    //no echo => return -1 
+    return -1; 
+}
+_delay_us(1); 
+}
+// count how long echo is high 
+uint32_t width = 0; 
+whilte (bitRead(PIND, Pin_Sonar_Echo)) 
+{ 
+width++;
+if (width>30000)
+{
+return -1;
+}
+_delay_us(1);
+}
+
+//Convert microsecond => distance in cm 
+//typical formula : distance cm = duiration /58 
+float distance_cm = (float) width / 58.0; 
+return distance_cm;
+}
+/**
+ *  Buzzer alarm with variable frequency based on distance.
+ */
+void beepAlarm(float distance)
+{
+    //Example if distance =1cm beep is very fast 
+    // if distance is 20cm beep is slower 
+
+if (distance<1.0f) distance =1.0f; //clamp 
+if (distance > 20.0f) distance = 20.0f; 
+// MAP 1...20 --> beep period 200...2000 us (example) 
+float beepPeriod = 200 + (distance-1.0f) * (1800.0f / (19.0f)); 
+//We'll beep - 100ms total 
+int cycles = (int)(100000.0 / (beepPeriod * 2 )); 
+ for (int i = 0; i < cycles; i++)
+    {
+        // Buzzer ON
+        bitSet(PORTD, Pin_Buzzer);
+        _delay_us((uint16_t)beepPeriod);
+
+        // Buzzer OFF
+        bitClear(PORTD, Pin_Buzzer);
+        _delay_us((uint16_t)beepPeriod);
+    }
+}
+
