@@ -46,7 +46,7 @@ volatile bool flag_interrupted = 0;
 #define pin_button_emergency_mode PD2
 
 #define pin_button_change_sys_mode PB1
-#define pin_button_change_led_mode PB2
+#define pin_button_change_led_mode PC5
 
 
 
@@ -95,7 +95,6 @@ ISR(PCINT0_vect)
     _delay_ms(10);
     if (bitRead(PINB, pin_button_change_sys_mode))
     {
-        
         usart_send_string("SYS INTERUPT PCINT0_vect\r\n");
         sys_Mode = (sys_Mode + 1) % 2;
     }
@@ -104,9 +103,9 @@ ISR(PCINT0_vect)
 ISR(PCINT1_vect)
 {   
     _delay_ms(10);
-    if (bitRead(PINB, pin_button_change_led_mode))
+    if (bitRead(PINC, pin_button_change_led_mode))
     {
-        usart_send_string("SYS INTERUPT PCINT1_vect\r\n");
+        usart_send_string("LRD INTERUPT PCINT1_vect\r\n");
         led_Mode = (led_Mode + 1) % 3;
     }
 }
@@ -421,15 +420,14 @@ void Setup(){
     bitSet(DDRB, Pin_Green_Led);
     bitSet(DDRB, Pin_Yellow_Led);
 
-        
     bitClear(DDRD, pin_button_emergency_mode);
     bitSet(PORTD, pin_button_emergency_mode);
         
     bitClear(DDRB, pin_button_change_sys_mode);
     bitSet(PORTB, pin_button_change_sys_mode);
 
-    bitClear(DDRB, pin_button_change_led_mode);
-    bitSet(PORTB, pin_button_change_led_mode);
+    bitClear(DDRC, pin_button_change_led_mode);
+    bitSet(PORTC, pin_button_change_led_mode);
 
     //Interrupt Setup
     EIMSK |= 1 << INT0;
@@ -437,7 +435,9 @@ void Setup(){
 
     bitSet(PCICR,PCIE0);
     bitSet(PCMSK0,PCINT1);
-    bitSet(PCMSK0,PCINT2);
+
+    bitSet(PCICR, PCIE1);
+    bitSet(PCMSK1, PCINT13); 
 
     bitSet(ADMUX, REFS0); 
     bitSet(ADMUX, MUX1); 
