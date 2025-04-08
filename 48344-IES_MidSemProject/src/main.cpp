@@ -32,6 +32,11 @@ void Myteleplot(float brightness, int ADC_Low_Light, int ADC_High_Light);
 void project_Debugging(int DebugState, float Sonar_Range, float Brightness);
 void printMenu();
 
+float Sonar(int cnt, int timeout, float vel_sound);
+
+
+void Test();
+
 
 #define BUF_SIZE 50
 char usart_buf[BUF_SIZE] = {0};
@@ -48,15 +53,17 @@ volatile bool flag_interrupted = 0;
 #define pin_button_change_sys_mode PB1
 #define pin_button_change_led_mode PC5
 
+#define pin_sonar_trig PD7
+#define pin_sonar_echo PD6
 
 
 int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
 
-int sys_Mode = 0;
+int sys_Mode = 2;
 // 0 = Auto, 1 = Manual, 2 = Emergency
 
-int debug_State = 0;
+int debug_State = 1;
 // 0 = Nothing, 1 = Distance, 2 = Brightness, 3 = Both
 
 int adc = 0;
@@ -110,11 +117,9 @@ ISR(PCINT1_vect)
     }
 }
 
-
 ISR(ADC_vect){
   adc = ADC;
 }
-
 
 int main(void)
 {
@@ -132,14 +137,17 @@ int main(void)
     int ADC_High_Light = adc;
     
     
-    int counter=0;
     float Distance = 0;
+
+    int cnt_sonar = 0;
+    int timeout_sonar = 30000;
+    float vel_sound = 343;
+
     printMenu();
     usart_flush();
     while (1)
     {
-        counter = (counter+1)%180;
-        Distance = sin(counter*3.14/30);
+        Distance = Sonar(cnt_sonar, timeout_sonar, vel_sound);
 
         // Constantly adjust scale for brightness 
         bitSet(ADCSRA, ADSC);
@@ -203,10 +211,6 @@ int main(void)
 
         Led_Dictator(255*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
 
-
-        // debugPrint();
-        // Myteleplot(brightness_Definer(ADC_Low_Light, ADC_High_Light), ADC_Low_Light, ADC_High_Light);
-        
         usart_flush();
     }
 }
@@ -285,55 +289,6 @@ void Led_Dictator(int brightness, int Time)
     }
 }
 
-void debugPrint()
-{
-    usart_send_string("----------------------\r\n");
-
-    // usart_send_num(sys_Mode, 0, 0);
-    switch (sys_Mode)
-    {
-    case 0:
-            usart_send_string("SYS_MODE: Auto");
-        break;
-    
-    case 1:
-            usart_send_string("SYS_MODE: Manual");
-        break;
-
-    case 2:
-            usart_send_string("SYS_MODE: Emergency");
-        break;
-
-    default:
-        break;
-    }
-
-    usart_send_string("\r\n");
-
-    usart_send_string("\r\n");
-
-    switch (led_Mode)
-    {
-    case 0:
-            usart_send_string("Led: Green");
-        break;
-    
-    case 1:
-            usart_send_string("Led: Yellow");
-        break;
-
-    case 2:
-            usart_send_string("Led: Red");
-        break;
-
-    default:
-        break;
-    }
-
-
-    usart_send_string("\r\n");
-}
-
 float brightness_Definer(int ADC_Low_Light, int ADC_High_Light){
     float brightness = adc;
     brightness = (brightness - ADC_Low_Light)/(ADC_High_Light - ADC_Low_Light);
@@ -343,24 +298,6 @@ float brightness_Definer(int ADC_Low_Light, int ADC_High_Light){
     }
     
     return brightness;
-}
-
-void Myteleplot(float brightness, int ADC_Low_Light, int ADC_High_Light){
-        usart_send_string(">brightness:");
-        usart_send_num(brightness, 4, 4);
-        usart_send_string("\n");
-
-        // usart_send_string(">ADC_Low_Light:");
-        // usart_send_num(ADC_Low_Light, 4, 4);
-        // usart_send_string("\n");
-
-        // usart_send_string(">ADC_High_Light:");
-        // usart_send_num(ADC_High_Light, 4, 4);
-        // usart_send_string("\n");
-
-        // usart_send_string(">adc:");
-        // usart_send_num(adc, 4, 4);
-        // usart_send_string("\n");
 }
 
 void printMenu(){
@@ -375,7 +312,6 @@ void printMenu(){
     usart_send_string("3: Brighness and Distance Graph. \r\n");
     usart_send_string("Enter Debug Choice: \r\n");
 }
-
 
 void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
     switch (DebugState)
@@ -444,7 +380,34 @@ void Setup(){
     ADCSRA |= 0b111 < 0;
     bitSet(ADCSRA, ADIE);
     bitSet(ADCSRA, ADEN);
+    
+    // sonar setup
+    bitSet(DDRD,pin_sonar_trig);
+    bitClear(DDRD,pin_sonar_echo);
 
+}
+
+float Sonar(int cnt, int timeout, float vel_sound){
+
+    cnt = 0;
+    timeout = 30000;
+    bitClear(PORTD,pin_sonar_trig);
+    _delay_us(10);
+    bitSet(PORTD,pin_sonar_trig);
+    _delay_us(10);
+    bitClear(PORTD,pin_sonar_trig);
+
+    while (!bitRead(PIND, pin_sonar_echo))
+        ;
+    
+    while (bitRead(PIND, pin_sonar_echo) && timeout--) {
+        cnt++;
+        _delay_us(1);
+    }
+
+    float Dmm = (float)cnt / 1.0e6 * vel_sound / 2.0 * 1000.0;
+
+    return Dmm;
 }
 
 //------------------------------------------------------------------------------
@@ -533,4 +496,8 @@ void usart_read_string(char *ptr)
             ptr++;
         }
     }
+}
+
+void Test(){
+    usart_send_string("Test\r\n");
 }
