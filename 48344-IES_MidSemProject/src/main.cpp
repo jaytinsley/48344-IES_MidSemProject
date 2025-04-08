@@ -43,9 +43,12 @@ volatile bool flag_interrupted = 0;
 #define Pin_Yellow_Led  PB4  // Yellow
 #define Pin_Green_Led   PB5  // Green
 
-#define pin_button_change_led_mode PD2
+#define pin_button_emergency_mode PD2
 
 #define pin_button_change_sys_mode PB1
+#define pin_button_change_led_mode PB2
+
+
 
 int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
@@ -74,10 +77,16 @@ ISR(USART_RX_vect)
 ISR(INT0_vect)
 {
     _delay_ms(10);
-    usart_send_string("LED INTERUPT INT0\r\n");
-    if (bitRead(PIND, pin_button_change_led_mode))
+    usart_send_string("Emergency INTERUPT INT0\r\n");
+    if (bitRead(PIND, pin_button_emergency_mode))
     {
-        led_Mode = (led_Mode + 1) % 3;
+        if (sys_Mode != 2)
+        {
+            sys_Mode = 2;
+        } else{ 
+            sys_Mode = 0;
+        }
+        
     }
 }
 // int counter = 0;
@@ -86,10 +95,22 @@ ISR(PCINT0_vect)
     _delay_ms(10);
     if (bitRead(PINB, pin_button_change_sys_mode))
     {
+        
         usart_send_string("SYS INTERUPT PCINT0_vect\r\n");
-        sys_Mode = (sys_Mode + 1) % 3;
+        sys_Mode = (sys_Mode + 1) % 2;
     }
 }
+
+ISR(PCINT1_vect)
+{   
+    _delay_ms(10);
+    if (bitRead(PINB, pin_button_change_led_mode))
+    {
+        usart_send_string("SYS INTERUPT PCINT1_vect\r\n");
+        led_Mode = (led_Mode + 1) % 3;
+    }
+}
+
 
 ISR(ADC_vect){
   adc = ADC;
@@ -395,24 +416,28 @@ void project_Debugging(int DebugState, float Sonar_Range, float Brightness){
 }
 
 void Setup(){
-
+    // Led Setup
     bitSet(DDRB, Pin_Red_Led);
     bitSet(DDRB, Pin_Green_Led);
     bitSet(DDRB, Pin_Yellow_Led);
 
         
-    bitClear(DDRD,pin_button_change_led_mode);
-    bitSet(PORTD,pin_button_change_led_mode);
+    bitClear(DDRD, pin_button_emergency_mode);
+    bitSet(PORTD, pin_button_emergency_mode);
         
-    bitClear(DDRB,pin_button_change_sys_mode);
-    bitSet(PORTB,pin_button_change_sys_mode);
+    bitClear(DDRB, pin_button_change_sys_mode);
+    bitSet(PORTB, pin_button_change_sys_mode);
 
+    bitClear(DDRB, pin_button_change_led_mode);
+    bitSet(PORTB, pin_button_change_led_mode);
 
+    //Interrupt Setup
     EIMSK |= 1 << INT0;
     EICRA |= 3 << 0;
 
     bitSet(PCICR,PCIE0);
     bitSet(PCMSK0,PCINT1);
+    bitSet(PCMSK0,PCINT2);
 
     bitSet(ADMUX, REFS0); 
     bitSet(ADMUX, MUX1); 
