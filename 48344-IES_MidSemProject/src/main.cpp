@@ -34,9 +34,12 @@ void printMenu();
 
 float Sonar(int cnt, int timeout, float vel_sound);
 
+float fun_map(float x, float x1, float x2, float y1, float y2);
+void playSoundFor100ms (float F, float x);
 
 void Test();
 
+void DistanceBeep(float Distance);
 
 #define BUF_SIZE 50
 char usart_buf[BUF_SIZE] = {0};
@@ -48,6 +51,8 @@ volatile bool flag_interrupted = 0;
 #define Pin_Yellow_Led  PB4  // Yellow
 #define Pin_Green_Led   PB5  // Green
 
+#define Buzzer PB0
+
 #define pin_button_emergency_mode PD2
 
 #define pin_button_change_sys_mode PB1
@@ -57,13 +62,16 @@ volatile bool flag_interrupted = 0;
 #define pin_sonar_echo PD6
 
 
+
+#define Distance_Cutoff 40
+
 int led_Mode = 0;
 // 0 = green, 1 = Yellow, 2 = Red
 
 int sys_Mode = 2;
 // 0 = Auto, 1 = Manual, 2 = Emergency
 
-int debug_State = 1;
+int debug_State = 3;
 // 0 = Nothing, 1 = Distance, 2 = Brightness, 3 = Both
 
 int adc = 0;
@@ -136,7 +144,6 @@ int main(void)
     int ADC_Low_Light = 0;
     int ADC_High_Light = adc;
     
-    
     float Distance = 0;
 
     int cnt_sonar = 0;
@@ -185,7 +192,8 @@ int main(void)
         }
         
         // usart_send_string("test");
-        project_Debugging(debug_State, Distance, brightness_Definer(ADC_Low_Light,ADC_High_Light));    
+        // project_Debugging(debug_State, Distance, adc);
+        project_Debugging(debug_State, Distance, fun_map(adc, ADC_Low_Light, ADC_High_Light,0, 1));
         
 
         // _delay_ms(100);
@@ -193,7 +201,7 @@ int main(void)
         {
         case 0:
             // Auto Mode
-            led_Mode = (led_Mode+1)%3;
+            led_Mode = (led_Mode+1)%3;                
             break;
 
         case 1:
@@ -209,7 +217,35 @@ int main(void)
             break;
         }
 
-        Led_Dictator(255*brightness_Definer(ADC_Low_Light,ADC_High_Light),1000);
+
+                    
+        if (Distance < Distance_Cutoff)
+        {
+            if (led_Mode != 2)
+            {
+                led_Mode = 2;
+                while (Distance < Distance_Cutoff)
+                {
+                    Distance = Sonar(cnt_sonar, timeout_sonar, vel_sound);
+                    DistanceBeep(Distance);
+                    project_Debugging(debug_State, Distance, fun_map(adc, ADC_Low_Light, ADC_High_Light,0, 1));
+                    Led_Dictator(fun_map(adc,ADC_Low_Light, ADC_High_Light, 10, 255),1000);
+                } 
+                
+            } else {
+                while (Distance < Distance_Cutoff)
+                {
+                    Distance = Sonar(cnt_sonar, timeout_sonar, vel_sound);
+                    project_Debugging(debug_State, Distance, fun_map(adc, ADC_Low_Light, ADC_High_Light,0, 1));
+                    Led_Dictator(fun_map(adc,ADC_Low_Light, ADC_High_Light, 10, 255),1000);
+
+                }             
+            }
+            
+        }
+               
+
+        Led_Dictator(fun_map(adc,ADC_Low_Light, ADC_High_Light, 10, 255),1000);
 
         usart_flush();
     }
@@ -409,6 +445,55 @@ float Sonar(int cnt, int timeout, float vel_sound){
 
     return Dmm;
 }
+
+void DistanceBeep(float Distance){
+    playSoundFor100ms(500,0.5);
+    // Delay the buzzer from 100ms to 1000ms based on distance, Closer means more delay means faster buzzing.
+    for (int i = 0; i < (10 - fun_map(Distance, 0, Distance_Cutoff, 0, 10)); i++)
+    {
+        _delay_ms(100);
+    }
+}
+
+void playSoundFor100ms (float F, float x) {
+    volatile float T = 1/F*1e6;
+
+    volatile int Ton = x*T;
+    volatile int Toff = T - Ton;
+
+    for (int j = 0; j < 2e5/T; j++){
+        bitSet(PORTB,Buzzer);
+        for (int i = 0; i < Ton; i++){
+            _delay_us(1);
+        }
+
+        bitClear(PORTB,Buzzer);
+        for (int i = 0; i < Toff; i++){
+            _delay_us(1);
+        }
+    }
+
+}
+
+float fun_map(float x, float x1, float x2, float y1, float y2) 
+{ 
+    float y; 
+    if (x < x1) 
+        x = x1; 
+
+    if (x > x2) 
+        x = x2; 
+
+    if (y2 > y1) 
+    { 
+        y = y1 + (y2 - y1) / (x2 - x1) * (x - x1); 
+    } 
+    else 
+    { 
+        y = y1 - (y1 - y2) / (x2 - x1) * (x - x1); 
+    } 
+    return y; 
+} 
 
 //------------------------------------------------------------------------------
 
